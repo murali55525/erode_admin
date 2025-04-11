@@ -1,24 +1,19 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-
-import AddProduct from "./add"; // Ensure your component is exported as AddProduct in add.js
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./Navbar";
+import AdminProductManagement from "./add";
+// Import other pages as needed
 
 const App = () => {
   return (
     <Router>
-      <div>
-        <nav>
-          <ul>
-            <li>
-              <Link to="/">Add Product</Link>
-            </li>
-          </ul>
-        </nav>
-
-        <Routes>
-          <Route path="/" element={<AddProduct />} />
-        </Routes>
-      </div>
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<h1>Welcome to FancyStore Admin</h1>} />
+        <Route path="/products" element={<AdminProductManagement />} />
+        <Route path="/categories" element={<h1>Categories Management</h1>} />
+        {/* Add more routes as needed */}
+      </Routes>
     </Router>
   );
 };
