@@ -23,20 +23,23 @@ if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
 
+require("dotenv").config(); // add this as line 1
+
 // MongoDB Connection
 mongoose
-  .connect("mongodb://127.0.0.1:27017/fancyStore", {
+  .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log("Connected to MongoDB");
+    console.log("✅ Connected to MongoDB Atlas");
     populateCategories();
   })
   .catch((error) => {
-    console.error("Failed to connect to MongoDB:", error.message);
+    console.error("❌ MongoDB Atlas connection error:", error.message);
     process.exit(1);
   });
+
 
 // Configure Multer for Image Upload
 const storage = multer.diskStorage({
