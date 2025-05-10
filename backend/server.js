@@ -4,17 +4,18 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001"],
+  origin: "*",  // Allow all origins for development
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
   credentials: true,
-  optionsSuccessStatus: 200,
 }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -30,6 +31,8 @@ mongoose
   .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
   })
   .then(() => {
     console.log("✅ Connected to MongoDB Atlas");
@@ -40,17 +43,39 @@ mongoose
     process.exit(1);
   });
 
-
 // Configure Multer for Image Upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, "uploads"));
+    const uploadDir = path.join(__dirname, "uploads");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`);
-  },
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+    }
+  }
+});
+
+// Helper function to get full image URL
+const getFullImageUrl = (imagePath) => {
+  if (!imagePath) return "";
+  return `${process.env.BASE_URL || 'http://localhost:5001'}/${imagePath}`;
+};
 
 // Category Schema
 const categorySchema = new mongoose.Schema({
@@ -76,6 +101,15 @@ const productSchema = new mongoose.Schema({
   dateAdded: { type: Date, default: Date.now },
 });
 const Product = mongoose.model("Product", productSchema);
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ["admin", "client"], default: "client" }, // Ensure roles are properly defined
+});
+const User = mongoose.model("User", userSchema);
 
 // Populate Categories
 const populateCategories = async () => {
@@ -114,7 +148,7 @@ app.post("/api/categories", upload.single("image"), async (req, res) => {
 
     res.status(201).json({
       message: "Category added successfully!",
-      category: { ...category._doc, imageUrl: imageUrl ? `http://localhost:5001/${imageUrl}` : "", _id: category._id },
+      category: { ...category._doc, imageUrl: getFullImageUrl(imageUrl), _id: category._id },
     });
   } catch (error) {
     console.error("Error saving category:", error.message);
@@ -132,7 +166,7 @@ app.get("/api/categories", async (req, res) => {
     const categories = await Category.find().sort({ dateAdded: -1 });
     const categoriesWithFullUrls = categories.map((category) => ({
       ...category._doc,
-      imageUrl: category.imageUrl ? `http://localhost:5001/${category.imageUrl}` : "",
+      imageUrl: getFullImageUrl(category.imageUrl),
       _id: category._id,
     }));
     res.status(200).json(categoriesWithFullUrls);
@@ -149,7 +183,7 @@ app.get("/api/categories/:id", async (req, res) => {
     if (!category) return res.status(404).json({ error: "Category not found" });
     res.status(200).json({
       ...category._doc,
-      imageUrl: category.imageUrl ? `http://localhost:5001/${category.imageUrl}` : "",
+      imageUrl: getFullImageUrl(category.imageUrl),
       _id: category._id,
     });
   } catch (error) {
@@ -185,7 +219,7 @@ app.put("/api/categories/:id", upload.single("image"), async (req, res) => {
 
     res.status(200).json({
       message: "Category updated successfully!",
-      category: { ...updatedCategory._doc, imageUrl: imageUrl ? `http://localhost:5001/${imageUrl}` : "", _id: updatedCategory._id },
+      category: { ...updatedCategory._doc, imageUrl: getFullImageUrl(imageUrl), _id: updatedCategory._id },
     });
   } catch (error) {
     console.error("Error updating category:", error.message);
@@ -243,7 +277,7 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
     await product.save();
     res.status(201).json({
       message: "Product added successfully!",
-      product: { ...product._doc, imageUrl: imageUrl ? `http://localhost:5001/${imageUrl}` : "", _id: product._id },
+      product: { ...product._doc, imageUrl: getFullImageUrl(imageUrl), _id: product._id },
     });
   } catch (error) {
     console.error("Error saving product:", error.message);
@@ -257,7 +291,7 @@ app.get("/api/products", async (req, res) => {
     const products = await Product.find().sort({ dateAdded: -1 });
     const productsWithFullUrls = products.map((product) => ({
       ...product._doc,
-      imageUrl: product.imageUrl ? `http://localhost:5001/${product.imageUrl}` : "",
+      imageUrl: getFullImageUrl(product.imageUrl),
       _id: product._id,
     }));
     res.status(200).json(productsWithFullUrls);
@@ -274,7 +308,7 @@ app.get("/api/products/:id", async (req, res) => {
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.status(200).json({
       ...product._doc,
-      imageUrl: product.imageUrl ? `http://localhost:5001/${product.imageUrl}` : "",
+      imageUrl: getFullImageUrl(product.imageUrl),
       _id: product._id,
     });
   } catch (error) {
@@ -322,7 +356,7 @@ app.put("/api/products/:id", upload.single("image"), async (req, res) => {
 
     res.status(200).json({
       message: "Product updated successfully!",
-      product: { ...updatedProduct._doc, imageUrl: imageUrl ? `http://localhost:5001/${imageUrl}` : "", _id: updatedProduct._id },
+      product: { ...updatedProduct._doc, imageUrl: getFullImageUrl(imageUrl), _id: updatedProduct._id },
     });
   } catch (error) {
     console.error("Error updating product:", error.message);
@@ -359,7 +393,7 @@ app.post("/api/products/lens-search", upload.single("image"), async (req, res) =
     const matchedProducts = await Product.find().limit(5);
     const productsWithFullUrls = matchedProducts.map((product) => ({
       ...product._doc,
-      imageUrl: product.imageUrl ? `http://localhost:5001/${product.imageUrl}` : "",
+      imageUrl: getFullImageUrl(product.imageUrl),
       _id: product._id,
     }));
 
@@ -371,6 +405,43 @@ app.post("/api/products/lens-search", upload.single("image"), async (req, res) =
   } catch (error) {
     console.error("Error in lens search:", error.stack);
     res.status(500).json({ message: "Failed to process lens search.", error: error.message });
+  }
+});
+
+// Login Route
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required." });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    // Check password (assuming passwords are hashed)
+    const isPasswordValid = password === user.password; // Replace with bcrypt.compare if passwords are hashed
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET || "murali555",
+      { expiresIn: "1h" }
+    );
+
+    // Return token and user role
+    res.status(200).json({ token, role: user.role });
+  } catch (error) {
+    console.error("Error during login:", error.message);
+    res.status(500).json({ message: "Server error during login." });
   }
 });
 

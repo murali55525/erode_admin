@@ -3,18 +3,23 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 
 const app = express();
+const dotenv = require("dotenv");
 
+dotenv.config();
 // Middleware
 app.use(express.json());
 app.use(cors());
 
-// MongoDB connection
 mongoose
-  .connect("mongodb://127.0.0.1:27017/fancyStore")
-  .then(() => console.log("Connected to MongoDB for Project 2"))
-  .catch((error) => console.error("Failed to connect to MongoDB:", error.message));
-
-// Product Schema
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ Connected to MongoDB Atlas"))
+  .catch((err) => {
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
+  });
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
   price: { type: Number, required: true },
