@@ -243,13 +243,14 @@ const ProductCard = ({ product, onDelete }) => (
   <div className="bg-white rounded-lg border shadow-sm hover:shadow-md transition-shadow">
     <div className="relative h-48">
       <img 
-        src={product.imageUrl}
+        src={product.imageId ? `${BASE_URL}/api/images/${product.imageId}` : '/placeholder-product.png'}
         alt={product.name}
         className="h-full w-full object-cover rounded-t-lg"
         onError={(e) => {
           e.target.onerror = null;
-          e.target.src = `${BASE_URL}/uploads/default.jpg`;
+          e.target.src = '/placeholder-product.png';
         }}
+        loading="lazy"
       />
     </div>
     <div className="p-4">

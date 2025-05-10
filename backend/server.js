@@ -2,101 +2,98 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const { GridFSBucket } = require("mongodb");
+const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const app = express();
 
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: "*",  // Allow all origins for development
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   credentials: true,
 }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Ensure "uploads" directory exists
-if (!fs.existsSync("uploads")) {
-  fs.mkdirSync("uploads");
-}
+// Add variable for gfs
+let gfs;
 
-require("dotenv").config(); // add this as line 1
-
-// MongoDB Connection
+// Update MongoDB Connection with GridFS initialization
 mongoose
-  .connect(process.env.MONGODB_URI, {
+  .connect(process.env.MONGODB_URI || "mongodb+srv://your_username:your_password@cluster0.mongodb.net/erodefancy", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
   })
   .then(() => {
     console.log("✅ Connected to MongoDB Atlas");
-    populateCategories();
+    // Initialize GridFS
+    gfs = new GridFSBucket(mongoose.connection.db, {
+      bucketName: "uploads"
+    });
+    console.log("✅ GridFS initialized");
   })
   .catch((error) => {
     console.error("❌ MongoDB Atlas connection error:", error.message);
-    process.exit(1);
   });
 
-// Configure Multer for Image Upload
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
+// Configure Multer for Memory Storage
+const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      cb(new Error("Invalid file type. Only JPEG, PNG, and GIF are allowed."));
     }
-  }
+  },
 });
 
-// Helper function to get full image URL
-const getFullImageUrl = (imagePath) => {
-  if (!imagePath) return "";
-  return `${process.env.BASE_URL || 'http://localhost:5001'}/${imagePath}`;
-};
+// Multer Error Handling Middleware
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({ error: "File upload error: " + error.message });
+  }
+  if (error.message.includes("Invalid file type")) {
+    return res.status(400).json({ error: error.message });
+  }
+  next(error);
+});
+
+// General Error Handling Middleware
+app.use((error, req, res, next) => {
+  console.error("Server error:", error.message);
+  res.status(500).json({ error: "Internal server error: " + error.message });
+});
 
 // Category Schema
 const categorySchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, unique: true },
-  imageUrl: { type: String, required: false },
+  imageId: { type: mongoose.Types.ObjectId, required: false }, // GridFS file ID
   dateAdded: { type: Date, default: Date.now },
 });
 const Category = mongoose.model("Category", categorySchema);
 
-// Product Schema (Updated)
+// Product Schema
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   price: { type: Number, required: true, min: 0 },
-  category: { type: String, required: true }, // Flexible string for Home/Shop
+  category: { type: String, required: true },
   rating: { type: Number, default: 0, min: 0, max: 5 },
   colors: [String],
-  availableQuantity: { type: Number, default: 0, min: 0 }, // Shop-specific
-  stock: { type: Number, default: 0, min: 0 }, // Home-specific
-  sold: { type: Number, default: 0, min: 0 }, // Home-specific
+  availableQuantity: { type: Number, default: 0, min: 0 },
+  stock: { type: Number, default: 0, min: 0 },
+  sold: { type: Number, default: 0, min: 0 },
   description: { type: String, required: true, trim: true },
-  imageUrl: { type: String, required: false },
+  imageId: { type: mongoose.Types.ObjectId, required: false }, // GridFS file ID
   offerEnds: { type: Date },
   dateAdded: { type: Date, default: Date.now },
 });
@@ -107,7 +104,7 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ["admin", "client"], default: "client" }, // Ensure roles are properly defined
+  role: { type: String, enum: ["admin", "client"], default: "client" },
 });
 const User = mongoose.model("User", userSchema);
 
@@ -128,10 +125,23 @@ const populateCategories = async () => {
     ];
 
     await Category.insertMany(categoriesToAdd);
-    console.log("Product categories added to the database:", categoriesToAdd);
+    console.log("Product categories added to the database:", categoriesToAdd.length);
   } catch (error) {
     console.error("Error populating categories:", error.message);
   }
+};
+
+// Helper function to upload image to GridFS
+const uploadImageToGridFS = (file) => {
+  return new Promise((resolve, reject) => {
+    const writeStream = gfs.openUploadStream(file.originalname, {
+      contentType: file.mimetype,
+    });
+    writeStream.write(file.buffer);
+    writeStream.end();
+    writeStream.on("finish", () => resolve(writeStream.id));
+    writeStream.on("error", (error) => reject(error));
+  });
 };
 
 // Routes
@@ -142,13 +152,17 @@ app.post("/api/categories", upload.single("image"), async (req, res) => {
     const { name } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Category name is required." });
 
-    const imageUrl = req.file ? `uploads/${req.file.filename}` : "";
-    const category = new Category({ name: name.trim(), imageUrl });
+    let imageId = null;
+    if (req.file) {
+      imageId = await uploadImageToGridFS(req.file);
+    }
+
+    const category = new Category({ name: name.trim(), imageId });
     await category.save();
 
     res.status(201).json({
       message: "Category added successfully!",
-      category: { ...category._doc, imageUrl: getFullImageUrl(imageUrl), _id: category._id },
+      category: { ...category._doc, _id: category._id },
     });
   } catch (error) {
     console.error("Error saving category:", error.message);
@@ -164,12 +178,7 @@ app.post("/api/categories", upload.single("image"), async (req, res) => {
 app.get("/api/categories", async (req, res) => {
   try {
     const categories = await Category.find().sort({ dateAdded: -1 });
-    const categoriesWithFullUrls = categories.map((category) => ({
-      ...category._doc,
-      imageUrl: getFullImageUrl(category.imageUrl),
-      _id: category._id,
-    }));
-    res.status(200).json(categoriesWithFullUrls);
+    res.status(200).json(categories);
   } catch (error) {
     console.error("Error fetching categories:", error.message);
     res.status(500).json({ error: "Failed to fetch categories: " + error.message });
@@ -181,11 +190,7 @@ app.get("/api/categories/:id", async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ error: "Category not found" });
-    res.status(200).json({
-      ...category._doc,
-      imageUrl: getFullImageUrl(category.imageUrl),
-      _id: category._id,
-    });
+    res.status(200).json(category);
   } catch (error) {
     console.error("Error fetching category:", error.message);
     res.status(500).json({ error: "Failed to fetch category: " + error.message });
@@ -197,29 +202,26 @@ app.put("/api/categories/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
-    let imageUrl = req.body.imageUrl || (await Category.findById(id))?.imageUrl || "";
+    let imageId = (await Category.findById(id))?.imageId;
 
     if (req.file) {
-      const oldCategory = await Category.findById(id);
-      if (oldCategory?.imageUrl) {
-        const oldFilename = oldCategory.imageUrl.split("uploads/")[1];
-        fs.unlink(path.join(__dirname, "uploads", oldFilename), (err) => {
-          if (err) console.error("Failed to delete old category image:", err.message);
-        });
+      // Delete old image from GridFS if it exists
+      if (imageId) {
+        await gfs.delete(new mongoose.Types.ObjectId(imageId));
       }
-      imageUrl = `uploads/${req.file.filename}`;
+      imageId = await uploadImageToGridFS(req.file);
     }
 
     const updatedCategory = await Category.findByIdAndUpdate(
       id,
-      { name: name ? name.trim() : undefined, imageUrl },
+      { name: name ? name.trim() : undefined, imageId },
       { new: true, runValidators: true }
     );
     if (!updatedCategory) return res.status(404).json({ error: "Category not found" });
 
     res.status(200).json({
       message: "Category updated successfully!",
-      category: { ...updatedCategory._doc, imageUrl: getFullImageUrl(imageUrl), _id: updatedCategory._id },
+      category: { ...updatedCategory._doc, _id: updatedCategory._id },
     });
   } catch (error) {
     console.error("Error updating category:", error.message);
@@ -237,11 +239,8 @@ app.delete("/api/categories/:id", async (req, res) => {
     const deletedCategory = await Category.findByIdAndDelete(req.params.id);
     if (!deletedCategory) return res.status(404).json({ error: "Category not found" });
 
-    if (deletedCategory.imageUrl) {
-      const filename = deletedCategory.imageUrl.split("uploads/")[1];
-      fs.unlink(path.join(__dirname, "uploads", filename), (err) => {
-        if (err) console.error("Failed to delete category image file:", err.message);
-      });
+    if (deletedCategory.imageId) {
+      await gfs.delete(new mongoose.Types.ObjectId(deletedCategory.imageId));
     }
 
     res.status(200).json({ message: "Category deleted successfully!" });
@@ -251,53 +250,55 @@ app.delete("/api/categories/:id", async (req, res) => {
   }
 });
 
-// Add Product API (Updated)
-app.post("/api/products", upload.single("image"), async (req, res) => {
+// Add Product API
+app.post("/api/admin/products", upload.single("image"), async (req, res) => {
   try {
-    const { name, price, category, rating, colors, availableQuantity, stock, sold, description, offerEnds } = req.body;
-    if (!name?.trim() || !price || !category || !description?.trim()) {
-      return res.status(400).json({ error: "Name, price, category, and description are required." });
+    const { name, price, category, description, stock } = req.body;
+    
+    let imageId = null;
+    if (req.file) {
+      imageId = await uploadImageToGridFS(req.file);
     }
 
-    const imageUrl = req.file ? `uploads/${req.file.filename}` : req.body.imageUrl || "";
     const product = new Product({
-      name: name.trim(),
+      name,
       price: parseFloat(price),
       category,
-      rating: parseInt(rating) || 0,
-      colors: colors ? colors.split(",").map((color) => color.trim()) : [],
-      availableQuantity: parseInt(availableQuantity) || parseInt(stock) || 0,
-      stock: parseInt(stock) || parseInt(availableQuantity) || 0,
-      sold: parseInt(sold) || 0,
-      description: description.trim(),
-      imageUrl,
-      offerEnds: offerEnds ? new Date(offerEnds) : undefined,
+      description,
+      stock: parseInt(stock),
+      imageId
     });
 
     await product.save();
     res.status(201).json({
+      success: true,
       message: "Product added successfully!",
-      product: { ...product._doc, imageUrl: getFullImageUrl(imageUrl), _id: product._id },
+      product
     });
   } catch (error) {
-    console.error("Error saving product:", error.message);
-    res.status(500).json({ error: "Failed to save product: " + error.message });
+    console.error("Error saving product:", error);
+    res.status(500).json({ error: "Failed to save product" });
   }
 });
 
 // Get Products API
-app.get("/api/products", async (req, res) => {
+app.get("/api/admin/products", async (req, res) => {
   try {
     const products = await Product.find().sort({ dateAdded: -1 });
-    const productsWithFullUrls = products.map((product) => ({
+    
+    // Transform products to include image URLs
+    const productsWithUrls = products.map(product => ({
       ...product._doc,
-      imageUrl: getFullImageUrl(product.imageUrl),
-      _id: product._id,
+      imageUrl: product.imageId ? `/api/images/${product.imageId}` : null
     }));
-    res.status(200).json(productsWithFullUrls);
+
+    res.status(200).json({
+      success: true,
+      data: productsWithUrls
+    });
   } catch (error) {
-    console.error("Error fetching products:", error.message);
-    res.status(500).json({ error: "Failed to fetch products: " + error.message });
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
@@ -306,33 +307,26 @@ app.get("/api/products/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ error: "Product not found" });
-    res.status(200).json({
-      ...product._doc,
-      imageUrl: getFullImageUrl(product.imageUrl),
-      _id: product._id,
-    });
+    res.status(200).json(product);
   } catch (error) {
     console.error("Error fetching product:", error.message);
     res.status(500).json({ error: "Failed to fetch product: " + error.message });
   }
 });
 
-// Update Product API (Updated)
+// Update Product API
 app.put("/api/products/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, price, category, rating, colors, availableQuantity, stock, sold, description, offerEnds } = req.body;
-    let imageUrl = req.body.imageUrl || (await Product.findById(id))?.imageUrl || "";
+    let imageId = (await Product.findById(id))?.imageId;
 
     if (req.file) {
-      const oldProduct = await Product.findById(id);
-      if (oldProduct?.imageUrl) {
-        const oldFilename = oldProduct.imageUrl.split("uploads/")[1];
-        fs.unlink(path.join(__dirname, "uploads", oldFilename), (err) => {
-          if (err) console.error("Failed to delete old image:", err.message);
-        });
+      // Delete old image from GridFS if it exists
+      if (imageId) {
+        await gfs.delete(new mongoose.Types.ObjectId(imageId));
       }
-      imageUrl = `uploads/${req.file.filename}`;
+      imageId = await uploadImageToGridFS(req.file);
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -347,7 +341,7 @@ app.put("/api/products/:id", upload.single("image"), async (req, res) => {
         stock: stock ? parseInt(stock) : availableQuantity ? parseInt(availableQuantity) : undefined,
         sold: sold ? parseInt(sold) : undefined,
         description: description ? description.trim() : undefined,
-        imageUrl,
+        imageId,
         offerEnds: offerEnds ? new Date(offerEnds) : undefined,
       },
       { new: true, runValidators: true }
@@ -356,7 +350,7 @@ app.put("/api/products/:id", upload.single("image"), async (req, res) => {
 
     res.status(200).json({
       message: "Product updated successfully!",
-      product: { ...updatedProduct._doc, imageUrl: getFullImageUrl(imageUrl), _id: updatedProduct._id },
+      product: { ...updatedProduct._doc, _id: updatedProduct._id },
     });
   } catch (error) {
     console.error("Error updating product:", error.message);
@@ -370,11 +364,8 @@ app.delete("/api/products/:id", async (req, res) => {
     const deletedProduct = await Product.findByIdAndDelete(req.params.id);
     if (!deletedProduct) return res.status(404).json({ error: "Product not found" });
 
-    if (deletedProduct.imageUrl) {
-      const filename = deletedProduct.imageUrl.split("uploads/")[1];
-      fs.unlink(path.join(__dirname, "uploads", filename), (err) => {
-        if (err) console.error("Failed to delete image file:", err.message);
-      });
+    if (deletedProduct.imageId) {
+      await gfs.delete(new mongoose.Types.ObjectId(deletedProduct.imageId));
     }
 
     res.status(200).json({ message: "Product deleted successfully!" });
@@ -384,67 +375,163 @@ app.delete("/api/products/:id", async (req, res) => {
   }
 });
 
-// Lens Search API (Unchanged)
+// Lens Search API (Placeholder - Update as Needed)
 app.post("/api/products/lens-search", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "Image file is required." });
-    const imagePath = req.file.path;
 
+    // Placeholder: Implement actual lens search logic
     const matchedProducts = await Product.find().limit(5);
-    const productsWithFullUrls = matchedProducts.map((product) => ({
-      ...product._doc,
-      imageUrl: getFullImageUrl(product.imageUrl),
-      _id: product._id,
-    }));
-
-    fs.unlink(imagePath, (err) => {
-      if (err) console.error("Failed to delete temp image:", err);
-    });
-
-    res.status(200).json(productsWithFullUrls);
+    res.status(200).json(matchedProducts);
   } catch (error) {
-    console.error("Error in lens search:", error.stack);
-    res.status(500).json({ message: "Failed to process lens search.", error: error.message });
+    console.error("Error in lens search:", error.message);
+    res.status(500).json({ message: "Failed to process lens search: " + error.message });
   }
 });
 
-// Login Route
+// Update Get Image API
+app.get("/api/images/:id", async (req, res) => {
+  try {
+    if (!gfs) {
+      return res.status(500).json({ error: "GridFS not initialized" });
+    }
+
+    const fileId = new mongoose.Types.ObjectId(req.params.id);
+    const files = await gfs.find({ _id: fileId }).toArray();
+    
+    if (!files || files.length === 0) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    const file = files[0];
+    res.set('Content-Type', file.contentType);
+    
+    const readStream = gfs.openDownloadStream(fileId);
+    readStream.pipe(res);
+
+    readStream.on('error', (error) => {
+      console.error('Error streaming file:', error);
+      res.status(500).json({ error: "Error streaming file" });
+    });
+  } catch (error) {
+    console.error("Error fetching image:", error.message);
+    res.status(500).json({ error: "Failed to fetch image" });
+  }
+});
+
+// Register User API (Optional - For creating users)
+app.post("/api/register", async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Name, email, and password are required." });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "Email already exists." });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || "client",
+    });
+    await user.save();
+
+    res.status(201).json({ message: "User registered successfully!" });
+  } catch (error) {
+    console.error("Error registering user:", error.message);
+    res.status(500).json({ error: "Failed to register user: " + error.message });
+  }
+});
+
+// Login API
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Validate input
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required." });
     }
 
-    // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    // Check password (assuming passwords are hashed)
-    const isPasswordValid = password === user.password; // Replace with bcrypt.compare if passwords are hashed
+    const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || "murali555",
+      process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
 
-    // Return token and user role
     res.status(200).json({ token, role: user.role });
   } catch (error) {
     console.error("Error during login:", error.message);
-    res.status(500).json({ message: "Server error during login." });
+    res.status(500).json({ message: "Server error during login: " + error.message });
+  }
+});
+
+// Update Product API Routes
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ dateAdded: -1 });
+    res.status(200).json(products.map(product => ({
+      _id: product._id,
+      name: product.name,
+      price: product.price,
+      category: product.category,
+      description: product.description,
+      stock: product.stock,
+      imageId: product.imageId,
+      imageUrl: product.imageId ? `/api/images/${product.imageId}` : null
+    })));
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+app.post("/api/products", upload.single("image"), async (req, res) => {
+  try {
+    const { name, price, category, description, stock } = req.body;
+    
+    let imageId = null;
+    if (req.file) {
+      imageId = await uploadImageToGridFS(req.file);
+    }
+
+    const product = new Product({
+      name,
+      price: parseFloat(price),
+      category,
+      description,
+      stock: parseInt(stock),
+      imageId
+    });
+
+    await product.save();
+
+    res.status(201).json({
+      message: "Product added successfully!",
+      product: {
+        ...product._doc,
+        imageUrl: imageId ? `/api/images/${imageId}` : null
+      }
+    });
+  } catch (error) {
+    console.error("Error saving product:", error);
+    res.status(500).json({ error: "Failed to save product" });
   }
 });
 
 // Start Server
-const PORT = 5001;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));

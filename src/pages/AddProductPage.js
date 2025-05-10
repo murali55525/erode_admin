@@ -42,32 +42,20 @@ const AddProductPage = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImage(file);
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
       const formDataToSend = new FormData();
       
-      // Append all form data
+      // Append all form data except image
       Object.keys(formData).forEach(key => {
         formDataToSend.append(key, formData[key]);
       });
       
+      // Handle image upload
       if (image) {
-        formDataToSend.append('image', image);
+        formDataToSend.append('image', image); // Changed from 'productImage' to 'image' to match server
       }
 
       const response = await axios.post(
@@ -75,19 +63,48 @@ const AddProductPage = () => {
         formDataToSend,
         {
           headers: { 
-            Authorization: `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
         }
       );
 
-      if (response.data.success) {
+      if (response.data.message === "Product added successfully!") {
         navigate('/products');
+      } else {
+        throw new Error(response.data.error || 'Failed to add product');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add product');
+      console.error('Error details:', err.response?.data || err.message);
+      setError(err.response?.data?.error || err.message || 'Failed to add product');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be less than 5MB');
+        return;
+      }
+
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (!validTypes.includes(file.type)) {
+        setError('Only JPEG, PNG and GIF files are allowed');
+        return;
+      }
+
+      setImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+      setError(null); // Clear any existing errors
     }
   };
 
