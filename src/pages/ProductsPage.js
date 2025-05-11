@@ -6,7 +6,7 @@ import { Package, Eye, Edit, Trash2, ArrowUpRight, Grid, List, ChevronDown } fro
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5001'; // Update to match server port
+const BASE_URL = 'http://localhost:5000'; // Update to match server port
 
 const ProductsPage = () => {
   const { token } = useAuth();

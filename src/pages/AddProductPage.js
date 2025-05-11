@@ -6,7 +6,7 @@ import { Package, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5001'; // Update to match server port
+const BASE_URL = 'http://localhost:5000'; // Update to match server port
 
 const AddProductPage = () => {
   const { token } = useAuth();
