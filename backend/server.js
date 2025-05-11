@@ -418,7 +418,147 @@ app.get("/api/images/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch image" });
   }
 });
+app.put("/api/admin/orders/:orderId/status", async (req, res) => {
+  // WARNING: This endpoint is publicly accessible without authentication.
+  // In production, secure it with an API key, IP whitelisting, or other access control.
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
 
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ message: "Invalid order ID" });
+    }
+
+    if (!["Pending", "Processing", "Delivered", "Cancelled"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Order status updated",
+      order: {
+        _id: order._id,
+        status: order.status,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating order status (Port 5001):", error.stack);
+    res.status(500).json({ message: "Failed to update order status", error: error.message });
+  }
+});
+
+// Cancel Order (Unauthenticated)
+app.put("/api/admin/orders/:orderId/cancel", async (req, res) => {
+  // WARNING: This endpoint is publicly accessible without authentication.
+  // In production, secure it with an API key, IP whitelisting, or other access control.
+  try {
+    const { orderId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ message: "Invalid order ID" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.status === "Cancelled") {
+      return res.status(400).json({ message: "Order is already cancelled" });
+    }
+
+    order.status = "Cancelled";
+    await order.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Order cancelled",
+      order: {
+        _id: order._id,
+        status: order.status,
+      },
+    });
+  } catch (error) {
+    console.error("Error cancelling order (Port 5001):", error.stack);
+    res.status(500).json({ message: "Failed to cancel order", error: error.message });
+  }
+});
+
+// Generate Invoice (Unauthenticated)
+app.get("/api/admin/orders/:orderId/invoice", async (req, res) => {
+  // WARNING: This endpoint is publicly accessible without authentication.
+  // In production, secure it with an API key, IP whitelisting, or other access control.
+  try {
+    const { orderId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ message: "Invalid order ID" });
+    }
+
+    const order = await Order.findById(orderId).populate("userId", "name email phone");
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const latexContent = `
+\\documentclass[a4paper,12pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage{geometry}
+\\geometry{margin=1in}
+\\usepackage{booktabs}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+\\usepackage{hyperref}
+\\usepackage{palatino}
+\\title{Invoice}
+\\author{}
+\\date{\\today}
+\\begin{document}
+\\maketitle
+\\section*{Invoice}
+\\textbf{Order ID:} ${order._id}\\\\
+\\textbf{Customer:} ${order.userId?.name || 'Unknown'} \\\\
+\\textbf{Email:} ${order.userId?.email || 'N/A'} \\\\
+\\textbf{Phone:} ${order.userId?.phone || 'N/A'} \\\\
+\\textbf{Order Date:} ${new Date(order.createdAt).toLocaleDateString()} \\\\
+\\textbf{Status:} ${order.status} \\\\
+\\textbf{Shipping Address:} ${order.shippingInfo?.address || 'N/A'} \\\\
+\\vspace{0.5cm}
+\\begin{table}[h!]
+\\centering
+\\begin{tabular}{llrr}
+\\toprule
+\\textbf{Item} & \\textbf{Color} & \\textbf{Quantity} & \\textbf{Price (₹)} \\\\
+\\midrule
+${order.items
+  .map(
+    (item) => `${item.name || 'Unknown'} & ${item.color || 'N/A'} & ${item.quantity || 0} & ${item.price?.toFixed(2) || '0.00'} \\\\`
+  )
+  .join('')}
+\\bottomrule
+\\end{tabular}
+\\end{table}
+\\vspace{0.5cm}
+\\textbf{Total Amount:} ₹${order.totalAmount?.toFixed(2) || '0.00'} \\\\
+\\end{document}
+`;
+
+    res.setHeader('Content-Type', 'text/latex');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice_${orderId}.tex`);
+    res.status(200).send(latexContent);
+  } catch (error) {
+    console.error("Error generating invoice (Port 5001):", error.stack);
+    res.status(500).json({ message: "Failed to generate invoice", error: error.message });
+  }
+});
 // Register User API (Optional - For creating users)
 app.post("/api/register", async (req, res) => {
   try {
