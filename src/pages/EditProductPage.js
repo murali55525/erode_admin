@@ -1,14 +1,14 @@
-// src/pages/AddProductPage.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Plus, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
 const BASE_URL = 'http://localhost:5000';
 
-const AddProductPage = () => {
+const EditProductPage = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -24,28 +24,64 @@ const AddProductPage = () => {
     description: '',
     stock: '',
     colors: '',
-    rating: '0',
+    rating: '',
     offerEnds: '',
   });
   
   const [formFile, setFormFile] = useState(null);
 
+  // Get the correct image URL for GridFS
+  const getProductImageUrl = (product) => {
+    if (product.imageId) {
+      return `${BASE_URL}/api/images/${product.imageId}`;
+    } else if (product.imageUrl && product.imageUrl.startsWith('/api/images/')) {
+      return `${BASE_URL}${product.imageUrl}`;
+    } else if (product.imageUrl) {
+      return product.imageUrl;
+    }
+    return null;
+  };
+
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${BASE_URL}/api/categories`);
-        setCategories(response.data);
+        
+        // Fetch categories
+        const categoriesRes = await axios.get(`${BASE_URL}/api/categories`);
+        setCategories(categoriesRes.data);
+        
+        // Fetch product details
+        const productRes = await axios.get(`${BASE_URL}/api/products/${id}`);
+        const product = productRes.data;
+        
+        setFormData({
+          name: product.name || '',
+          price: product.price || '',
+          category: product.category || '',
+          description: product.description || '',
+          stock: product.stock || product.availableQuantity || 0,
+          colors: Array.isArray(product.colors) ? product.colors.join(', ') : '',
+          rating: product.rating || 0,
+          offerEnds: product.offerEnds ? new Date(product.offerEnds).toISOString().split('T')[0] : '',
+        });
+        
+        // Set image preview using GridFS URL
+        const imageUrl = getProductImageUrl(product);
+        if (imageUrl) {
+          setImagePreview(imageUrl);
+        }
+        
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching categories:', err);
-        setError(`Failed to load categories: ${err.message}`);
+        console.error('Error fetching data:', err);
+        setError(`Failed to load product data: ${err.message}`);
         setLoading(false);
       }
     };
 
-    fetchCategories();
-  }, []);
+    fetchData();
+  }, [id]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -65,8 +101,6 @@ const AddProductPage = () => {
         setImagePreview(reader.result);
       };
       reader.readAsDataURL(file);
-    } else {
-      setImagePreview(null);
     }
   };
 
@@ -94,8 +128,8 @@ const AddProductPage = () => {
         productData.append('image', formFile);
       }
       
-      // Add new product
-      const response = await axios.post(`${BASE_URL}/api/products`, productData, {
+      // Update product data
+      await axios.put(`${BASE_URL}/api/products/${id}`, productData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'multipart/form-data',
@@ -103,15 +137,10 @@ const AddProductPage = () => {
       });
       
       setSubmitting(false);
-      
-      // After successful creation, navigate to the product detail page
-      // The image will be served via GridFS from the imageId field
-      navigate(`/products/${response.data.product._id}`, { 
-        state: { message: 'Product added successfully' } 
-      });
+      navigate(`/products/${id}`, { state: { message: 'Product updated successfully' } });
     } catch (err) {
-      console.error('Error adding product:', err);
-      setError(`Failed to add product: ${err.response?.data?.error || err.message}`);
+      console.error('Error updating product:', err);
+      setError(`Failed to update product: ${err.response?.data?.error || err.message}`);
       setSubmitting(false);
     }
   };
@@ -124,10 +153,10 @@ const AddProductPage = () => {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link to="/products" className="flex items-center text-gray-500 hover:text-gray-700">
+          <Link to={`/products/${id}`} className="flex items-center text-gray-500 hover:text-gray-700">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Add New Product</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Edit Product</h1>
         </div>
       </div>
 
@@ -293,7 +322,7 @@ const AddProductPage = () => {
                   className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  PNG, JPG or GIF up to 5MB
+                  PNG, JPG or GIF up to 5MB. Leave empty to keep current image.
                 </p>
               </div>
               
@@ -308,6 +337,10 @@ const AddProductPage = () => {
                         src={imagePreview}
                         alt="Product Preview"
                         className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = '/placeholder-product.png';
+                        }}
                       />
                     </div>
                   </div>
@@ -319,7 +352,7 @@ const AddProductPage = () => {
         
         <div className="bg-gray-50 px-6 py-3 flex justify-end">
           <Link
-            to="/products"
+            to={`/products/${id}`}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mr-3"
           >
             Cancel
@@ -335,12 +368,12 @@ const AddProductPage = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Adding...
+                Saving...
               </span>
             ) : (
               <span className="flex items-center">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Product
+                <Save className="mr-2 h-4 w-4" />
+                Save Changes
               </span>
             )}
           </button>
@@ -350,4 +383,4 @@ const AddProductPage = () => {
   );
 };
 
-export default AddProductPage;
+export default EditProductPage;

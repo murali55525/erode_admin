@@ -21,8 +21,13 @@ import {
   Shield,
   Bookmark,
   ChevronRight,
-  Calendar
+  Calendar,
+  Truck,
+  Percent,
+  Grid,
+  BarChart2
 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
@@ -42,6 +47,8 @@ const HomePage = () => {
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentProducts, setRecentProducts] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
+  const [salesData, setSalesData] = useState([]);
+  const [topCustomers, setTopCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -53,9 +60,11 @@ const HomePage = () => {
 
         const headers = { 'Content-Type': 'application/json' };
         
-        const [adminData, overviewData] = await Promise.all([
+        const [adminData, overviewData, ordersData, usersData] = await Promise.all([
           axios.get(`${BASE_URL}/api/admin/data`, { headers }),
-          axios.get(`${BASE_URL}/api/admin/overview`, { headers })
+          axios.get(`${BASE_URL}/api/admin/overview`, { headers }),
+          axios.get(`${BASE_URL}/api/admin/orders`, { headers }),
+          axios.get(`${BASE_URL}/api/admin/users/all`, { headers })
         ]);
 
         // Add null checks and default values
@@ -91,6 +100,44 @@ const HomePage = () => {
           stock: product.stock || 0,
           imageUrl: product.imageUrl || ''
         })));
+
+        // Process orders to create sales data for chart
+        const allOrders = ordersData.data.data || [];
+        const salesByMonth = allOrders.reduce((acc, order) => {
+          const date = new Date(order.createdAt || order.orderDate);
+          const monthYear = `${date.getMonth() + 1}/${date.getFullYear()}`;
+          
+          if (!acc[monthYear]) {
+            acc[monthYear] = {
+              month: monthYear,
+              sales: 0,
+              orders: 0
+            };
+          }
+          
+          acc[monthYear].sales += order.totalAmount || 0;
+          acc[monthYear].orders += 1;
+          
+          return acc;
+        }, {});
+
+        // Convert to array and sort by date
+        const salesChartData = Object.values(salesByMonth).sort((a, b) => {
+          const [aMonth, aYear] = a.month.split('/');
+          const [bMonth, bYear] = b.month.split('/');
+          return new Date(aYear, aMonth - 1) - new Date(bYear, bMonth - 1);
+        });
+        
+        setSalesData(salesChartData.slice(-6)); // Only show last 6 months
+        
+        // Process users to find top customers
+        const users = usersData.data?.data || [];
+        const usersWithOrders = users
+          .filter(user => user.orderHistory?.total > 0)
+          .sort((a, b) => (b.orderHistory?.totalSpent || 0) - (a.orderHistory?.totalSpent || 0))
+          .slice(0, 5);
+          
+        setTopCustomers(usersWithOrders);
 
         setLoading(false);
       } catch (err) {
@@ -173,6 +220,42 @@ const HomePage = () => {
     day: 'numeric'
   });
 
+  // Quick access modules
+  const quickAccessModules = [
+    {
+      title: 'Inventory Management',
+      icon: <Grid className="h-5 w-5 text-white" />,
+      description: 'Manage stock levels and product availability',
+      path: '/inventory',
+      color: 'from-indigo-500 to-indigo-700',
+      metric: `${stats.lowStock} items low on stock`
+    },
+    {
+      title: 'Shipping & Orders',
+      icon: <Truck className="h-5 w-5 text-white" />,
+      description: 'Track deliveries and manage shipping',
+      path: '/shipping',
+      color: 'from-green-500 to-green-700',
+      metric: `${stats.ordersByStatus?.Pending || 0} pending shipments`
+    },
+    {
+      title: 'Discounts & Offers',
+      icon: <Percent className="h-5 w-5 text-white" />,
+      description: 'Create and manage promotional campaigns',
+      path: '/discounts',
+      color: 'from-purple-500 to-purple-700',
+      metric: '4 active discounts'
+    },
+    {
+      title: 'Analytics Dashboard',
+      icon: <BarChart2 className="h-5 w-5 text-white" />,
+      description: 'Detailed reports and business insights',
+      path: '/analytics',
+      color: 'from-blue-500 to-blue-700',
+      metric: 'Sales up 15% this month'
+    }
+  ];
+
   return (
     <Layout stats={stats}>
       {error && (
@@ -239,82 +322,197 @@ const HomePage = () => {
         />
       </div>
       
-      <div className="mb-8 overflow-hidden rounded-xl bg-white shadow-md">
+      {/* Quick Access Modules */}
+      <div className="mb-8 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+        {quickAccessModules.map((module, index) => (
+          <Link 
+            key={index}
+            to={module.path}
+            className="block rounded-xl overflow-hidden shadow-md transition-transform duration-300 hover:shadow-lg hover:-translate-y-1"
+          >
+            <div className={`bg-gradient-to-r ${module.color} p-5 text-white`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  {module.icon}
+                </div>
+                <ChevronRight className="h-5 w-5 text-white/70" />
+              </div>
+              <h3 className="text-lg font-semibold">{module.title}</h3>
+              <p className="text-sm text-white/80 mt-1">{module.description}</p>
+              <div className="mt-3 text-xs bg-white/20 rounded-full px-3 py-1 inline-block">
+                {module.metric}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Sales Analytics Chart */}
+      <div className="mb-8 rounded-xl bg-white shadow-md overflow-hidden">
         <div className="flex items-center justify-between border-b p-5">
           <div className="flex items-center">
-            <ShoppingCart className="h-5 w-5 text-purple-600 mr-2" />
-            <h2 className="text-lg font-bold text-gray-900">Recent Orders</h2>
+            <BarChart2 className="h-5 w-5 text-purple-600 mr-2" />
+            <h2 className="text-lg font-bold text-gray-900">Sales Overview</h2>
           </div>
-          <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200">
-              <Filter className="h-3.5 w-3.5" />
-              <span>Filter</span>
-            </button>
+          <Link
+            to="/analytics"
+            className="flex items-center space-x-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
+          >
+            <span>View Analytics</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+        <div className="p-5">
+          <div className="h-64">
+            {salesData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `₹${value.toLocaleString()}`} />
+                  <Bar dataKey="sales" name="Revenue (₹)" fill="#8884d8" />
+                  <Bar dataKey="orders" name="Orders" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-gray-500">No sales data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      <div className="mb-8 grid gap-6 md:grid-cols-3">
+        {/* Recent Orders Panel */}
+        <div className="md:col-span-2 overflow-hidden rounded-xl bg-white shadow-md">
+          <div className="flex items-center justify-between border-b p-5">
+            <div className="flex items-center">
+              <ShoppingCart className="h-5 w-5 text-purple-600 mr-2" />
+              <h2 className="text-lg font-bold text-gray-900">Recent Orders</h2>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button className="flex items-center space-x-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200">
+                <Filter className="h-3.5 w-3.5" />
+                <span>Filter</span>
+              </button>
+              <Link
+                to="/orders"
+                className="flex items-center space-x-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
+              >
+                <span>View All</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-4 py-4">Order ID</th>
+                  <th className="whitespace-nowrap px-4 py-4">Customer</th>
+                  <th className="whitespace-nowrap px-4 py-4">Date</th>
+                  <th className="whitespace-nowrap px-4 py-4">Amount</th>
+                  <th className="whitespace-nowrap px-4 py-4">Status</th>
+                  <th className="whitespace-nowrap px-4 py-4">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {recentOrders.length > 0 ? (
+                  recentOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-sm font-medium text-gray-900">{order.id}</td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-sm text-gray-700">{order.customerName}</td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-sm text-gray-700">
+                        <div className="flex items-center">
+                          <Clock className="mr-1.5 h-3.5 w-3.5 text-gray-400" />
+                          {order.date}
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-sm font-medium text-gray-900">₹{order.amount.toLocaleString()}</td>
+                      <td className="whitespace-nowrap px-4 py-3.5">
+                        <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5">
+                        <Link
+                          to={`/orders/${order.id}`}
+                          className="inline-flex items-center rounded-lg bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors duration-200"
+                        >
+                          <Eye className="mr-1.5 h-3.5 w-3.5" />
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
+                      No recent orders found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        {/* Top Customers Panel */}
+        <div className="overflow-hidden rounded-xl bg-white shadow-md">
+          <div className="flex items-center justify-between border-b p-5">
+            <div className="flex items-center">
+              <Users className="h-5 w-5 text-purple-600 mr-2" />
+              <h2 className="text-lg font-bold text-gray-900">Top Customers</h2>
+            </div>
             <Link
-              to="/orders"
+              to="/customers"
               className="flex items-center space-x-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
             >
               <span>View All</span>
               <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                <th className="whitespace-nowrap px-4 py-4">Order ID</th>
-                <th className="whitespace-nowrap px-4 py-4">User ID</th>
-                <th className="whitespace-nowrap px-4 py-4">Date</th>
-                <th className="whitespace-nowrap px-4 py-4">Items</th>
-                <th className="whitespace-nowrap px-4 py-4">Amount</th>
-                <th className="whitespace-nowrap px-4 py-4">Status</th>
-                <th className="whitespace-nowrap px-4 py-4">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {recentOrders.length > 0 ? (
-                recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-medium text-gray-900">{order.id}</td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm text-gray-700">{order.userId}</td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm text-gray-700">
-                      <div className="flex items-center">
-                        <Clock className="mr-1.5 h-3.5 w-3.5 text-gray-400" />
-                        {order.date}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm text-gray-700">
-                      <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
-                        {order.items} items
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5 text-sm font-medium text-gray-900">₹{order.amount.toLocaleString()}</td>
-                    <td className="whitespace-nowrap px-4 py-3.5">
-                      <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3.5">
-                      <Link
-                        to={`/orders/${order.id}`}
-                        className="inline-flex items-center rounded-lg bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors duration-200"
-                      >
-                        <Eye className="mr-1.5 h-3.5 w-3.5" />
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="7" className="px-4 py-8 text-center text-sm text-gray-500">
-                    No recent orders found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <div className="p-4">
+            {topCustomers.length > 0 ? (
+              <div className="space-y-4">
+                {topCustomers.map((customer) => (
+                  <div key={customer.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-purple-50 transition-colors">
+                    <div className="flex-shrink-0">
+                      {customer.profileImage ? (
+                        <img 
+                          src={customer.profileImage} 
+                          alt={customer.name} 
+                          className="h-10 w-10 rounded-full object-cover border-2 border-purple-100"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="100%" height="100%" fill="%23334155"/><text x="50%" y="50%" font-size="20" fill="white" text-anchor="middle" dy=".3em">${customer.name?.charAt(0).toUpperCase() || 'U'}</text></svg>`;
+                          }}
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-medium">
+                          {customer.name?.charAt(0).toUpperCase() || 'U'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{customer.name}</p>
+                      <p className="text-xs text-gray-500">{customer.orderHistory?.total || 0} orders</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gray-900">₹{(customer.orderHistory?.totalSpent || 0).toLocaleString()}</p>
+                      <p className="text-xs text-green-600">Top spender</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-10 text-center text-sm text-gray-500">
+                No customer data available
+              </div>
+            )}
+          </div>
         </div>
       </div>
       

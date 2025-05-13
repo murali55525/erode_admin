@@ -58,6 +58,62 @@ const ProductsPage = () => {
     fetchProducts();
   }, []);
 
+  const updateProduct = async (productId, updates) => {
+    try {
+      const headers = { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+      
+      // Use the correct endpoint to update the product
+      await axios.put(`${BASE_URL}/api/products/${productId}`, updates, { headers });
+      
+      // Refresh products after update
+      fetchProducts();
+      
+      return true;
+    } catch (err) {
+      console.error("Error updating product:", err);
+      setError(`Failed to update product: ${err.response?.data?.message || err.message}`);
+      return false;
+    }
+  };
+  
+  // Add a function to update stock or any specific product field
+  const updateProductStock = async (productId, newStock) => {
+    return updateProduct(productId, { stock: newStock });
+  };
+  
+  // Add function to update product availability (for quick toggles)
+  const toggleProductAvailability = async (productId, currentStock) => {
+    // If stock is 0, set it to a default value (10), otherwise set to 0
+    const newStock = currentStock === 0 ? 10 : 0;
+    return updateProduct(productId, { stock: newStock });
+  };
+
+  // Add a function to quickly increase/decrease product stock
+  const quickUpdateStock = async (productId, stockDelta) => {
+    try {
+      const product = products.find(p => p._id === productId);
+      if (!product) return false;
+      
+      const newStock = Math.max(0, (product.stock || 0) + stockDelta);
+      const success = await updateProduct(productId, { stock: newStock });
+      
+      if (success) {
+        // Update local state
+        setProducts(products.map(p => 
+          p._id === productId ? {...p, stock: newStock} : p
+        ));
+      }
+      
+      return success;
+    } catch (err) {
+      console.error("Error updating stock:", err);
+      return false;
+    }
+  };
+
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
@@ -68,19 +124,6 @@ const ProductsPage = () => {
       } catch (err) {
         setError(`Failed to delete product: ${err.message}`);
       }
-    }
-  };
-
-  const updateProduct = async (productId, updates) => {
-    try {
-      await axios.post(`${BASE_URL}/api/admin/update-product`, {
-        productId,
-        updates
-      });
-      // Refresh products after update
-      fetchProducts();
-    } catch (err) {
-      setError(`Failed to update product: ${err.message}`);
     }
   };
 
@@ -216,7 +259,21 @@ const ProductsPage = () => {
                   <td className="px-4 py-3 text-sm text-gray-700">{product.category}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">₹{product.price}</td>
                   <td className="px-4 py-3 text-sm">
-                    <span className={product.stock < 10 ? 'text-red-600' : 'text-gray-700'}>{product.stock}</span>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => quickUpdateStock(product._id, -1)}
+                        className="h-5 w-5 rounded bg-gray-200 flex items-center justify-center hover:bg-gray-300"
+                      >-</button>
+                      
+                      <span className={product.stock < 10 ? 'text-red-600' : 'text-gray-700'}>
+                        {product.stock}
+                      </span>
+                      
+                      <button 
+                        onClick={() => quickUpdateStock(product._id, 1)}
+                        className="h-5 w-5 rounded bg-gray-200 flex items-center justify-center hover:bg-gray-300"
+                      >+</button>
+                    </div>
                   </td>
                   <td className="px-4 py-3 flex space-x-2">
                     <Link to={`/products/${product._id}`} className="text-blue-600 hover:text-blue-800">
