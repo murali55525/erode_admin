@@ -15,6 +15,8 @@ const OrdersPage = ({ userProfile, activeSession }) => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [usersMap, setUsersMap] = useState({});
+  const [processingUpdate, setProcessingUpdate] = useState(false);
+  const [statusUpdateSuccess, setStatusUpdateSuccess] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -75,6 +77,16 @@ const OrdersPage = ({ userProfile, activeSession }) => {
     fetchData();
   }, []);
 
+  // Show notification for 3 seconds then hide
+  useEffect(() => {
+    if (statusUpdateSuccess) {
+      const timer = setTimeout(() => {
+        setStatusUpdateSuccess(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusUpdateSuccess]);
+
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'delivered':
@@ -92,12 +104,29 @@ const OrdersPage = ({ userProfile, activeSession }) => {
 
   const updateOrderStatus = async (orderId, status) => {
     try {
-      // Change to /api/admin/orders instead of /api/orders
-      await axios.put(
+      // Prevent multiple clicks
+      if (processingUpdate) return;
+      
+      setProcessingUpdate(true);
+      setError(null);
+      
+      // Log the request for debugging
+      console.log(`Updating order ${orderId} to status: ${status}`);
+      
+      // Make the API call with appropriate headers
+      const response = await axios.put(
         `${CLIENT_BASE_URL}/api/admin/orders/${orderId}`,
         { status },
-        { headers: { 'Content-Type': 'application/json' } }
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            // Add authorization header if needed
+            // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
       );
+      
+      console.log('Update response:', response.data);
       
       // Update local state
       setOrders((prev) =>
@@ -112,21 +141,35 @@ const OrdersPage = ({ userProfile, activeSession }) => {
       }
       
       // Show success notification
-      alert(`Order status updated to ${status}`);
+      setStatusUpdateSuccess(true);
       
     } catch (err) {
       console.error("Error updating order status:", err);
-      setError(`Failed to update order status: ${err.response?.data?.message || err.message}`);
+      const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+      setError(`Failed to update order status: ${errorMessage}`);
+    } finally {
+      setProcessingUpdate(false);
     }
   };
 
   const cancelOrder = async (orderId) => {
     try {
-      // Change to /api/admin/orders instead of /api/orders
+      // Prevent multiple clicks
+      if (processingUpdate) return;
+      
+      setProcessingUpdate(true);
+      setError(null);
+      
       await axios.put(
         `${CLIENT_BASE_URL}/api/admin/orders/${orderId}`,
         { status: 'Cancelled' },
-        { headers: { 'Content-Type': 'application/json' } }
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            // Add authorization header if needed
+            // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
       );
       
       // Update local state
@@ -142,32 +185,37 @@ const OrdersPage = ({ userProfile, activeSession }) => {
       }
       
       // Show success notification
-      alert('Order cancelled successfully');
+      setStatusUpdateSuccess(true);
       
     } catch (err) {
       console.error("Error cancelling order:", err);
-      setError(`Failed to cancel order: ${err.response?.data?.message || err.message}`);
+      const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+      setError(`Failed to cancel order: ${errorMessage}`);
+    } finally {
+      setProcessingUpdate(false);
     }
   };
 
   const downloadInvoice = async (orderId) => {
     try {
+      setError(null);
       const response = await axios.get(`${ADMIN_BASE_URL}/api/admin/orders/${orderId}/invoice`, {
-        headers: { 'Content-Type': 'application/json' },
         responseType: 'blob',
       });
 
-      const blob = new Blob([response.data], { type: 'application/x-tex' });
+      // Create a download link
+      const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `invoice_${orderId}.tex`);
+      link.setAttribute('download', `invoice_${orderId}.pdf`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(`Failed to download invoice: ${err.response?.data?.message || err.message}`);
+      console.error("Error downloading invoice:", err);
+      setError(`Failed to download invoice: ${err.response?.data?.message || err.message || 'Unknown error'}`);
     }
   };
 
@@ -195,14 +243,30 @@ const OrdersPage = ({ userProfile, activeSession }) => {
 
   return (
     <Layout stats={stats}>
-      {error && (
-        <div className="mb-6 flex items-center rounded-lg bg-red-50 p-4 text-red-800">
-          <span>{error}</span>
+      {/* Status update notification */}
+      {statusUpdateSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-green-100 text-green-800 px-4 py-3 rounded-lg shadow-md flex items-center">
+          <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          <span>Order status updated successfully!</span>
         </div>
       )}
 
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
+      {error && (
+        <div className="mb-6 flex items-center rounded-lg bg-red-50 p-4 text-red-800">
+          <span>{error}</span>
+          <button 
+            className="ml-auto text-red-600 hover:text-red-800" 
+            onClick={() => setError(null)}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between">
+        <div className="flex items-center space-x-2 mb-4 sm:mb-0">
           <ShoppingCart className="h-6 w-6 text-[#234781]" />
           <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
         </div>
@@ -234,78 +298,86 @@ const OrdersPage = ({ userProfile, activeSession }) => {
             </button>
           </div>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-[#234781]/10 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-              <th className="px-4 py-3">Order ID</th>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Items</th>
-              <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {orders.length > 0 ? (
-              orders.map((order) => (
-                <tr
-                  key={order.id}
-                  className="hover:bg-blue-50 transition-colors"
-                  onClick={() => handleOrderClick(order)}
-                >
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{order.id}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{order.customerName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{order.date}</td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{order.items.length}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">₹{order.amount.toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(order.status)}`}
-                    >
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadInvoice(order.id);
-                      }}
-                      className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
-                    >
-                      <Download className="mr-1 h-3.5 w-3.5" />
-                      Invoice
-                    </button>
-                    {order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+        
+        {/* Responsive table with horizontal scroll on small screens */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px]">
+            <thead>
+              <tr className="bg-[#234781]/10 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3">Order ID</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Items</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {orders.length > 0 ? (
+                orders.map((order) => (
+                  <tr
+                    key={order.id}
+                    className="hover:bg-blue-50 transition-colors cursor-pointer"
+                    onClick={() => handleOrderClick(order)}
+                  >
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      <span className="hidden md:inline">{order.id}</span>
+                      <span className="md:hidden">{order.id.substr(0, 8)}...</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{order.customerName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{order.date}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{order.items.length}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">₹{order.amount.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(order.status)}`}
+                      >
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 flex items-center space-x-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          updateOrderStatus(order.id, 'Delivered');
+                          downloadInvoice(order.id);
                         }}
-                        className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-100"
+                        className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
                       >
-                        Mark Delivered
+                        <Download className="mr-1 h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Invoice</span>
                       </button>
-                    )}
+                      {order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateOrderStatus(order.id, 'Delivered');
+                          }}
+                          disabled={processingUpdate}
+                          className={`inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-100 ${processingUpdate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {processingUpdate ? 'Updating...' : 'Mark Delivered'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="px-4 py-3 text-center text-gray-500">
+                    No orders found.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="7" className="px-4 py-3 text-center text-gray-500">
-                  No orders found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Order Details Modal */}
       {showModal && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="relative w-full max-w-5xl rounded-lg bg-white p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="relative w-full max-w-5xl h-[90vh] overflow-y-auto rounded-lg bg-white p-6">
             <button
               className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
               onClick={() => setShowModal(false)}
@@ -362,83 +434,78 @@ const OrdersPage = ({ userProfile, activeSession }) => {
             <div className="mt-6">
               <h4 className="text-lg font-semibold text-gray-900">Order Items</h4>
               <div className="mt-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[#234781]/10 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                      <th className="px-4 py-2">Image</th>
-                      <th className="px-4 py-2">Product</th>
-                      <th className="px-4 py-2">Category</th>
-                      <th className="px-4 py-2">Color</th>
-                      <th className="px-4 py-2">Quantity</th>
-                      <th className="px-4 py-2">Price</th>
-                      <th className="px-4 py-2">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {selectedOrder.items.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-3">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              className="h-16 w-16 rounded-md object-cover"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.src = 'https://via.placeholder.com/48';
-                              }}
-                            />
-                          ) : (
-                            <div className="h-16 w-16 rounded-md bg-gray-200 flex items-center justify-center text-gray-500">
-                              N/A
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{item.name || 'Unknown'}</p>
-                            {item.productDetails && (
-                              <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.productDetails.description}</p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {item.productDetails?.category || 'N/A'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center">
-                            {item.color ? (
-                              <>
-                                <div 
-                                  className="h-4 w-4 rounded-full mr-2" 
-                                  style={{ backgroundColor: item.color.toLowerCase() }}
-                                ></div>
-                                <span className="text-sm text-gray-700">{item.color}</span>
-                              </>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px]">
+                    <thead>
+                      <tr className="bg-[#234781]/10 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        <th className="px-4 py-2">Image</th>
+                        <th className="px-4 py-2">Product</th>
+                        <th className="px-4 py-2">Color</th>
+                        <th className="px-4 py-2">Quantity</th>
+                        <th className="px-4 py-2">Price</th>
+                        <th className="px-4 py-2">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {selectedOrder.items.map((item, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-3">
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="h-16 w-16 rounded-md object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = 'https://via.placeholder.com/48';
+                                }}
+                              />
                             ) : (
-                              <span className="text-sm text-gray-700">N/A</span>
+                              <div className="h-16 w-16 rounded-md bg-gray-200 flex items-center justify-center text-gray-500">
+                                N/A
+                              </div>
                             )}
-                          </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{item.name || 'Unknown'}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center">
+                              {item.color ? (
+                                <>
+                                  <div 
+                                    className="h-4 w-4 rounded-full mr-2" 
+                                    style={{ backgroundColor: item.color.toLowerCase() }}
+                                  ></div>
+                                  <span className="text-sm text-gray-700">{item.color}</span>
+                                </>
+                              ) : (
+                                <span className="text-sm text-gray-700">N/A</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{item.quantity || 0}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">₹{item.price?.toFixed(2) || '0.00'}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            ₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50">
+                      <tr>
+                        <td colSpan="5" className="px-4 py-3 text-right text-sm font-medium text-gray-700">
+                          Subtotal:
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{item.quantity || 0}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">₹{item.price?.toFixed(2) || '0.00'}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          ₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                        <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                          ₹{selectedOrder.amount.toFixed(2)}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan="6" className="px-4 py-3 text-right text-sm font-medium text-gray-700">
-                        Subtotal:
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                        ₹{selectedOrder.amount.toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             </div>
 
@@ -467,7 +534,7 @@ const OrdersPage = ({ userProfile, activeSession }) => {
                     value={selectedOrder.status}
                     onChange={(e) => setSelectedOrder({...selectedOrder, status: e.target.value})}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#234781]"
-                    disabled={selectedOrder.status === 'Cancelled'}
+                    disabled={selectedOrder.status === 'Cancelled' || processingUpdate}
                   >
                     {['Pending', 'Processing', 'Delivered', 'Cancelled'].map((status) => (
                       <option key={status} value={status}>
@@ -478,23 +545,26 @@ const OrdersPage = ({ userProfile, activeSession }) => {
                   
                   <button
                     onClick={() => updateOrderStatus(selectedOrder.id, selectedOrder.status)}
-                    className="w-full rounded-md bg-[#234781] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a6b] transition-colors"
+                    disabled={processingUpdate}
+                    className={`w-full rounded-md bg-[#234781] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a6b] transition-colors ${processingUpdate ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Save Status
+                    {processingUpdate ? 'Updating Status...' : 'Save Status'}
                   </button>
                   
                   {selectedOrder.status !== 'Cancelled' && (
                     <button
                       onClick={() => cancelOrder(selectedOrder.id)}
-                      className="w-full rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                      disabled={processingUpdate}
+                      className={`w-full rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors ${processingUpdate ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      Cancel Order
+                      {processingUpdate ? 'Processing...' : 'Cancel Order'}
                     </button>
                   )}
                   
                   <button
                     onClick={() => downloadInvoice(selectedOrder.id)}
-                    className="w-full rounded-md bg-[#234781] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a6b] transition-colors"
+                    disabled={processingUpdate}
+                    className={`w-full rounded-md bg-[#234781] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a6b] transition-colors ${processingUpdate ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Download Invoice
                   </button>

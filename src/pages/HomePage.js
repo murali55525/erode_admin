@@ -52,6 +52,18 @@ const HomePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Handle the image URL correctly for GridFS
+  const getProductImageUrl = (product) => {
+    if (product.imageId) {
+      return `${BASE_URL}/api/images/${product.imageId}`;
+    } else if (product.imageUrl && product.imageUrl.startsWith('/api/images/')) {
+      return `${BASE_URL}${product.imageUrl}`;
+    } else if (product.imageUrl) {
+      return product.imageUrl;
+    }
+    return '/placeholder-product.png';
+  };
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -98,7 +110,8 @@ const HomePage = () => {
           price: product.price || 0,
           category: product.category || 'Uncategorized',
           stock: product.stock || 0,
-          imageUrl: product.imageUrl || ''
+          imageUrl: product.imageUrl || '',
+          imageId: product.imageId || ''  // Make sure to capture imageId for GridFS
         })));
 
         // Process orders to create sales data for chart
@@ -536,11 +549,12 @@ const HomePage = () => {
               <div key={product.id} className="group rounded-xl border border-gray-200 p-3 transition-all hover:border-purple-300 hover:shadow-md">
                 <div className="relative overflow-hidden rounded-lg">
                   <img
-                    src={product.imageUrl ? `${BASE_URL}/${product.imageUrl}` : "/api/placeholder/200/150"}
+                    src={getProductImageUrl(product)}
                     alt={product.name}
                     className="h-40 w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
-                      e.target.src = "/api/placeholder/200/150";
+                      e.target.onerror = null;
+                      e.target.src = "/placeholder-product.png";
                     }}
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 opacity-0 transition-all group-hover:bg-opacity-40 group-hover:opacity-100">
