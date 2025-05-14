@@ -5,7 +5,7 @@ import { ArrowLeft, Edit, ShoppingBag, Truck, Calendar, Tag, CircleDollarSign } 
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const ProductDetailPage = () => {
   const { id } = useParams();

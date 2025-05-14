@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const DiscountsPage = () => {
   const { token } = useAuth();

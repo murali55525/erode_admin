@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const ShippingPage = () => {
   const [orders, setOrders] = useState([]);

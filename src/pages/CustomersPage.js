@@ -4,7 +4,7 @@ import { Users, ShoppingCart, Heart, History, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const CustomersPage = ({ userProfile, activeSession }) => {
   const { token } = useAuth() || {};

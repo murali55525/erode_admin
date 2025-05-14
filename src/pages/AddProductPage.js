@@ -6,7 +6,7 @@ import { ArrowLeft, Plus, AlertCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const AddProductPage = () => {
   const navigate = useNavigate();

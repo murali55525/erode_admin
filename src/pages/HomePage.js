@@ -31,7 +31,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const HomePage = () => {
   const { token } = useAuth();
@@ -272,23 +272,23 @@ const HomePage = () => {
   return (
     <Layout stats={stats}>
       {error && (
-        <div className="mb-6 flex items-center rounded-lg bg-red-50 p-4 text-red-800 border border-red-200 shadow-sm">
-          <AlertCircle className="mr-3 h-5 w-5 flex-shrink-0" />
-          <span className="font-medium">{error}</span>
+        <div className="mb-4 md:mb-6 flex items-center rounded-lg bg-red-50 p-3 md:p-4 text-red-800 border border-red-200 shadow-sm">
+          <AlertCircle className="mr-2 md:mr-3 h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
+          <span className="text-sm md:text-base font-medium">{error}</span>
         </div>
       )}
       
-      <div className="mb-8 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
-        <div className="flex items-center justify-between">
+      <div className="mb-6 md:mb-8 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-4 md:p-6 text-white shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Welcome back, Admin</h1>
+            <h1 className="text-xl md:text-2xl font-bold">Welcome back, Admin</h1>
             <div className="flex items-center mt-2 text-purple-100">
-              <Calendar className="mr-2 h-4 w-4" />
-              <p>{currentDate}</p>
+              <Calendar className="mr-2 h-3 w-3 md:h-4 md:w-4" />
+              <p className="text-sm md:text-base">{currentDate}</p>
             </div>
-            <p className="mt-2 text-purple-100">Here's what's happening with your store today.</p>
+            <p className="mt-2 text-sm md:text-base text-purple-100">Here's what's happening with your store today.</p>
           </div>
-          <div className="hidden md:block">
+          <div className="mt-4 sm:mt-0 hidden md:block">
             <div className="bg-white bg-opacity-20 p-3 rounded-lg backdrop-blur-sm">
               <DollarSign className="h-8 w-8" />
             </div>
@@ -296,9 +296,9 @@ const HomePage = () => {
         </div>
       </div>
       
-      <div className="mb-8 grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 md:mb-8 grid gap-3 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          icon={<Users className="h-6 w-6 text-blue-600" />}
+          icon={<Users className="h-5 w-5 md:h-6 md:w-6 text-blue-600" />}
           title="Total Users"
           value={stats.userCount.toLocaleString()}
           subtitle={`${stats.activeUsers} active users`}
@@ -307,7 +307,7 @@ const HomePage = () => {
           trendUp={true}
         />
         <StatsCard
-          icon={<ShoppingCart className="h-6 w-6 text-green-600" />}
+          icon={<ShoppingCart className="h-5 w-5 md:h-6 md:w-6 text-green-600" />}
           title="Total Orders"
           value={stats.orderCount.toLocaleString()}
           subtitle={`${stats.ordersByStatus?.Pending || 0} pending`}
@@ -316,7 +316,7 @@ const HomePage = () => {
           trendUp={true}
         />
         <StatsCard
-          icon={<Package className="h-6 w-6 text-purple-600" />}
+          icon={<Package className="h-5 w-5 md:h-6 md:w-6 text-purple-600" />}
           title="Total Products"
           value={stats.productCount.toLocaleString()}
           subtitle={`${stats.lowStock} low stock`}
@@ -325,7 +325,7 @@ const HomePage = () => {
           trendUp={true}
         />
         <StatsCard
-          icon={<DollarSign className="h-6 w-6 text-yellow-600" />}
+          icon={<DollarSign className="h-5 w-5 md:h-6 md:w-6 text-yellow-600" />}
           title="Total Revenue"
           value={`₹${stats.revenue.toLocaleString()}`}
           subtitle={`${stats.ordersByStatus?.Delivered || 0} delivered`}
@@ -336,23 +336,23 @@ const HomePage = () => {
       </div>
       
       {/* Quick Access Modules */}
-      <div className="mb-8 grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 md:mb-8 grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {quickAccessModules.map((module, index) => (
           <Link 
             key={index}
             to={module.path}
             className="block rounded-xl overflow-hidden shadow-md transition-transform duration-300 hover:shadow-lg hover:-translate-y-1"
           >
-            <div className={`bg-gradient-to-r ${module.color} p-5 text-white`}>
-              <div className="flex items-center justify-between mb-3">
+            <div className={`bg-gradient-to-r ${module.color} p-4 md:p-5 text-white`}>
+              <div className="flex items-center justify-between mb-2 md:mb-3">
                 <div className="bg-white/20 p-2 rounded-lg">
                   {module.icon}
                 </div>
-                <ChevronRight className="h-5 w-5 text-white/70" />
+                <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-white/70" />
               </div>
-              <h3 className="text-lg font-semibold">{module.title}</h3>
-              <p className="text-sm text-white/80 mt-1">{module.description}</p>
-              <div className="mt-3 text-xs bg-white/20 rounded-full px-3 py-1 inline-block">
+              <h3 className="text-base md:text-lg font-semibold">{module.title}</h3>
+              <p className="text-xs md:text-sm text-white/80 mt-1">{module.description}</p>
+              <div className="mt-2 md:mt-3 text-xs bg-white/20 rounded-full px-2 py-0.5 md:px-3 md:py-1 inline-block">
                 {module.metric}
               </div>
             </div>
@@ -361,22 +361,22 @@ const HomePage = () => {
       </div>
 
       {/* Sales Analytics Chart */}
-      <div className="mb-8 rounded-xl bg-white shadow-md overflow-hidden">
-        <div className="flex items-center justify-between border-b p-5">
+      <div className="mb-6 md:mb-8 rounded-xl bg-white shadow-md overflow-hidden">
+        <div className="flex items-center justify-between border-b p-4 md:p-5">
           <div className="flex items-center">
             <BarChart2 className="h-5 w-5 text-purple-600 mr-2" />
             <h2 className="text-lg font-bold text-gray-900">Sales Overview</h2>
           </div>
           <Link
             to="/analytics"
-            className="flex items-center space-x-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
+            className="flex items-center space-x-1 rounded-lg bg-purple-50 px-2 py-1 md:px-3 md:py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
           >
             <span>View Analytics</span>
-            <ArrowUpRight className="h-3.5 w-3.5" />
+            <ArrowUpRight className="h-3 w-3 md:h-3.5 md:w-3.5" />
           </Link>
         </div>
-        <div className="p-5">
-          <div className="h-64">
+        <div className="p-3 md:p-5">
+          <div className="h-48 md:h-64">
             {salesData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={salesData}>
@@ -397,10 +397,10 @@ const HomePage = () => {
         </div>
       </div>
       
-      <div className="mb-8 grid gap-6 md:grid-cols-3">
+      <div className="mb-6 md:mb-8 grid gap-6 grid-cols-1 md:grid-cols-3">
         {/* Recent Orders Panel */}
-        <div className="md:col-span-2 overflow-hidden rounded-xl bg-white shadow-md">
-          <div className="flex items-center justify-between border-b p-5">
+        <div className="md:col-span-3 lg:col-span-2 overflow-hidden rounded-xl bg-white shadow-md">
+          <div className="flex items-center justify-between border-b p-4 md:p-5">
             <div className="flex items-center">
               <ShoppingCart className="h-5 w-5 text-purple-600 mr-2" />
               <h2 className="text-lg font-bold text-gray-900">Recent Orders</h2>
@@ -473,8 +473,8 @@ const HomePage = () => {
         </div>
         
         {/* Top Customers Panel */}
-        <div className="overflow-hidden rounded-xl bg-white shadow-md">
-          <div className="flex items-center justify-between border-b p-5">
+        <div className="md:col-span-3 lg:col-span-1 overflow-hidden rounded-xl bg-white shadow-md">
+          <div className="flex items-center justify-between border-b p-4 md:p-5">
             <div className="flex items-center">
               <Users className="h-5 w-5 text-purple-600 mr-2" />
               <h2 className="text-lg font-bold text-gray-900">Top Customers</h2>
@@ -529,21 +529,21 @@ const HomePage = () => {
         </div>
       </div>
       
-      <div className="mb-8 rounded-xl bg-white shadow-md overflow-hidden">
-        <div className="flex items-center justify-between border-b p-5">
+      <div className="mb-6 md:mb-8 rounded-xl bg-white shadow-md overflow-hidden">
+        <div className="flex items-center justify-between border-b p-4 md:p-5">
           <div className="flex items-center">
-            <Package className="h-5 w-5 text-purple-600 mr-2" />
-            <h2 className="text-lg font-bold text-gray-900">Top Products</h2>
+            <Package className="h-4 w-4 md:h-5 md:w-5 text-purple-600 mr-2" />
+            <h2 className="text-base md:text-lg font-bold text-gray-900">Top Products</h2>
           </div>
           <Link
             to="/products"
-            className="flex items-center space-x-1 rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
+            className="flex items-center space-x-1 rounded-lg bg-purple-50 px-2 py-1 md:px-3 md:py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors duration-200"
           >
             <span>View All</span>
-            <ArrowUpRight className="h-3.5 w-3.5" />
+            <ArrowUpRight className="h-3 w-3 md:h-3.5 md:w-3.5" />
           </Link>
         </div>
-        <div className="grid gap-6 p-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 md:gap-6 p-4 md:p-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           {recentProducts.length > 0 ? (
             recentProducts.map((product) => (
               <div key={product.id} className="group rounded-xl border border-gray-200 p-3 transition-all hover:border-purple-300 hover:shadow-md">
@@ -551,7 +551,7 @@ const HomePage = () => {
                   <img
                     src={getProductImageUrl(product)}
                     alt={product.name}
-                    className="h-40 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="h-32 sm:h-36 md:h-40 w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
                       e.target.onerror = null;
                       e.target.src = "/placeholder-product.png";
@@ -566,16 +566,16 @@ const HomePage = () => {
                     </Link>
                   </div>
                 </div>
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 md:mt-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900 line-clamp-1">{product.name}</h3>
-                    <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800 border border-purple-200">
+                    <h3 className="text-xs md:text-sm font-medium text-gray-900 line-clamp-1">{product.name}</h3>
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800 border border-purple-200">
                       {product.category}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
+                    <span className="text-xs md:text-sm font-bold text-gray-900">₹{product.price.toLocaleString()}</span>
+                    <span className={`text-xs px-1.5 py-0.5 md:px-2 md:py-1 rounded-full ${
                       product.stock < 10 
                         ? 'bg-red-50 text-red-700 border border-red-200' 
                         : 'bg-green-50 text-green-700 border border-green-200'
@@ -595,15 +595,15 @@ const HomePage = () => {
       </div>
 
       {/* Settings Section */}
-      <div className="mt-8 mb-6">
-        <div className="flex items-center mb-4">
-          <Settings className="h-5 w-5 text-purple-600 mr-2" />
-          <h2 className="text-lg font-bold text-gray-900">Admin Settings</h2>
+      <div className="mt-6 md:mt-8 mb-4 md:mb-6">
+        <div className="flex items-center mb-3 md:mb-4">
+          <Settings className="h-4 w-4 md:h-5 md:w-5 text-purple-600 mr-2" />
+          <h2 className="text-base md:text-lg font-bold text-gray-900">Admin Settings</h2>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
           {settingsSections.map((section, idx) => (
-            <div key={idx} className="rounded-xl bg-white p-6 shadow-md border border-gray-100 hover:border-purple-200 transition-colors duration-200">
-              <div className="flex items-center mb-4 pb-3 border-b">
+            <div key={idx} className="rounded-xl bg-white p-4 md:p-6 shadow-md border border-gray-100 hover:border-purple-200 transition-colors duration-200">
+              <div className="flex items-center mb-3 md:mb-4 pb-3 border-b">
                 <div className="p-2 rounded-lg bg-purple-50">
                   {React.cloneElement(section.icon, { className: "h-5 w-5 text-purple-600" })}
                 </div>
@@ -639,26 +639,27 @@ const HomePage = () => {
   );
 };
 
+// Update the StatsCard component for better responsiveness
 const StatsCard = ({ icon, title, value, subtitle, bgColor, trend, trendUp }) => (
-  <div className="rounded-xl bg-white p-5 shadow-md border border-gray-100 hover:border-purple-200 transition-all duration-300 hover:shadow-lg">
+  <div className="rounded-xl bg-white p-4 md:p-5 shadow-md border border-gray-100 hover:border-purple-200 transition-all duration-300 hover:shadow-lg">
     <div className="flex items-center">
-      <div className={`rounded-xl ${bgColor} p-3 shadow-sm`}>{icon}</div>
-      <div className="ml-4">
-        <p className="text-sm font-medium text-gray-500">{title}</p>
+      <div className={`rounded-xl ${bgColor} p-2 md:p-3 shadow-sm`}>{icon}</div>
+      <div className="ml-3 md:ml-4">
+        <p className="text-xs md:text-sm font-medium text-gray-500">{title}</p>
         <div className="flex items-center">
-          <h3 className="text-xl font-bold text-gray-900">{value}</h3>
+          <h3 className="text-lg md:text-xl font-bold text-gray-900">{value}</h3>
           {trend && (
-            <span className={`ml-2 flex items-center text-xs font-medium rounded-full px-2 py-0.5 ${
+            <span className={`ml-1 md:ml-2 flex items-center text-xs font-medium rounded-full px-1.5 py-0.5 md:px-2 md:py-0.5 ${
               trendUp 
                 ? 'text-green-700 bg-green-50 border border-green-200' 
                 : 'text-red-700 bg-red-50 border border-red-200'
             }`}>
               {trend}
-              <ArrowUpRight className={`ml-0.5 h-3 w-3 ${!trendUp && 'rotate-90'}`} />
+              <ArrowUpRight className={`ml-0.5 h-2.5 w-2.5 md:h-3 md:w-3 ${!trendUp && 'rotate-90'}`} />
             </span>
           )}
         </div>
-        {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-gray-500 mt-0.5 md:mt-1">{subtitle}</p>}
       </div>
     </div>
   </div>

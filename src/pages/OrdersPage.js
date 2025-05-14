@@ -4,8 +4,8 @@ import axios from 'axios';
 import { ShoppingCart, Eye, Filter, Download, User } from 'lucide-react';
 import Layout from '../components/Layout';
 
-const CLIENT_BASE_URL = 'http://localhost:5000';
-const ADMIN_BASE_URL = 'http://localhost:5000';
+const CLIENT_BASE_URL = 'https://render-1-ehkn.onrender.com';
+const ADMIN_BASE_URL = 'https://render-1-ehkn.onrender.com';
 
 const OrdersPage = ({ userProfile, activeSession }) => {
   const [orders, setOrders] = useState([]);
